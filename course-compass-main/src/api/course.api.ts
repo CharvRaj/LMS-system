@@ -22,6 +22,8 @@ export interface CourseData {
 
 export const courseApi = {
   getAllCourses: () => API.get("/courses"),
+  getTrendingCourses: (limit?: number) => API.get(`/courses/trending${limit ? `?limit=${limit}` : ""}`),
+  getAdminCourses: (page?: number, limit?: number) => API.get(`/courses/admin/all${page || limit ? `?${page ? `page=${page}` : ''}${limit ? `&limit=${limit}` : ''}` : ""}`),
   getLearningPaths: () => API.get("/courses/learning-paths"),
   getCourseById: (id: string) => API.get(`/courses/${id}`),
   createCourse: (data: CourseData) => API.post("/courses", data),

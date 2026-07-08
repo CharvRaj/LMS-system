@@ -9,7 +9,9 @@ const {
   deleteLesson,
   getInstructorStats,
   getLearningPaths,
-  generateLessonsAI
+  generateLessonsAI,
+  getTrendingCourses,
+  getAdminCourses
 } = require('../../controllers/courses.controller');
 
 const { protect, authorize } = require('../../middlewares/auth.middleware');
@@ -22,6 +24,12 @@ const router = express.Router();
 router.route('/')
   .get(cacheMiddleware(300), getCourses)
   .post(protect, authorize('instructor', 'admin'), validate(courseSchema), createCourse);
+
+router.route('/trending')
+  .get(cacheMiddleware(300), getTrendingCourses);
+
+router.route('/admin/all')
+  .get(cacheMiddleware(300), getAdminCourses);
 
 router.route('/learning-paths')
   .get(getLearningPaths);

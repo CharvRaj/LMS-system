@@ -324,6 +324,101 @@ exports.getLearningPaths = async (req, res, next) => {
   }
 };
 
+// @desc    Get trending courses (sorted by enrollments)
+// @route   GET /api/courses/trending
+// @access  Public
+exports.getTrendingCourses = async (req, res, next) => {
+  try {
+    const { limit = 6 } = req.query;
+    const limitNumber = parseInt(limit, 10);
+
+    const courses = await prisma.course.findMany({
+      where: { status: 'approved' },
+      include: {
+        instructor: { select: { id: true, name: true, email: true } },
+        lessons: true,
+        _count: { select: { enrollments: true } }
+      },
+      orderBy: [
+        { enrollments: { _count: 'desc' } },
+        { createdAt: 'desc' }
+      ],
+      take: limitNumber
+    });
+
+    res.status(200).json({
+      success: true,
+      count: courses.length,
+      data: courses
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get admin courses
+// @route   GET /api/courses/admin/all
+// @access  Private (Admin only)
+exports.getAdminCourses = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+
+    const pageNumber = parseInt(page, 10);
+    const limitNumber = parseInt(limit, 10);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // Get all courses created by admin users
+    const adminUsers = await prisma.user.findMany({
+      where: { role: 'admin' },
+      select: { id: true }
+    });
+
+    const adminIds = adminUsers.map(u => u.id);
+
+    const orderBy = {};
+    if (sortBy) {
+      orderBy[sortBy] = sortOrder === 'asc' ? 'asc' : 'desc';
+    }
+
+    const [courses, total] = await Promise.all([
+      prisma.course.findMany({
+        where: { 
+          instructorId: { in: adminIds },
+          status: 'approved'
+        },
+        include: {
+          instructor: { select: { id: true, name: true, email: true } },
+          lessons: true,
+          _count: { select: { enrollments: true } }
+        },
+        skip,
+        take: limitNumber,
+        orderBy
+      }),
+      prisma.course.count({ 
+        where: { 
+          instructorId: { in: adminIds },
+          status: 'approved'
+        }
+      })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      count: courses.length,
+      data: courses,
+      meta: {
+        total,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(total / limitNumber)
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Generate course lessons with AI
 // @route   POST /api/courses/:courseId/generate-lessons
 // @access  Private (Admin/Instructor)
