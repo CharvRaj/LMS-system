@@ -131,6 +131,16 @@ exports.createCourse = async (req, res, next) => {
       }
     });
 
+    await prisma.courseActivity.create({
+      data: {
+        courseId: course.id,
+        action: 'created',
+        details: 'Course created and initialized.',
+        userId: req.user.id,
+        userName: req.user.name,
+      }
+    });
+
     if (generateAI) {
       const { generateLessonsForCourse } = require('../utils/aiGenerator');
       const lessonsData = await generateLessonsForCourse(title, category, level);
@@ -193,6 +203,40 @@ exports.updateCourse = async (req, res, next) => {
       where: { id: req.params.id },
       data: dataToUpdate
     });
+
+    // Determine what changed for activity log
+    const changedFields = [];
+    if (dataToUpdate.title !== undefined && dataToUpdate.title !== course.title) changedFields.push('title');
+    if (dataToUpdate.description !== undefined && dataToUpdate.description !== course.description) changedFields.push('description');
+    if (dataToUpdate.category !== undefined && dataToUpdate.category !== course.category) changedFields.push('category');
+    if (dataToUpdate.level !== undefined && dataToUpdate.level !== course.level) changedFields.push('level');
+    if (dataToUpdate.price !== undefined && dataToUpdate.price !== course.price) changedFields.push('price');
+    if (dataToUpdate.celebrityTeacher !== undefined && dataToUpdate.celebrityTeacher !== course.celebrityTeacher) changedFields.push('instructor');
+    if (dataToUpdate.instructorId !== undefined && dataToUpdate.instructorId !== course.instructorId) changedFields.push('instructorId');
+    if (dataToUpdate.status !== undefined && dataToUpdate.status !== course.status) changedFields.push('status');
+
+    if (changedFields.length > 0) {
+      let action = 'edited';
+      let details = `Updated course details: ${changedFields.join(', ')}.`;
+
+      if (changedFields.includes('status') && updated.status === 'approved') {
+        action = 'published';
+        details = 'Course approved and published.';
+      } else if (changedFields.includes('instructor') || changedFields.includes('instructorId')) {
+        action = 'instructor_changed';
+        details = `Lead instructor changed to ${updated.celebrityTeacher || 'none'}.`;
+      }
+
+      await prisma.courseActivity.create({
+        data: {
+          courseId: course.id,
+          action,
+          details,
+          userId: req.user.id,
+          userName: req.user.name,
+        }
+      });
+    }
     // Invalidate course cache
     await clearCache('cache:/api/courses');
     res.status(200).json({ success: true, data: updated });
@@ -394,6 +438,30 @@ exports.generateLessonsAI = async (req, res, next) => {
     await clearCache('cache:/api/courses');
 
     res.status(200).json({ success: true, data: createdLessons });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get course activity timeline
+// @route   GET /api/courses/:id/timeline
+// @access  Private
+exports.getCourseTimeline = async (req, res, next) => {
+  try {
+    const courseId = req.params.id;
+
+    // Check if course exists
+    const course = await prisma.course.findUnique({ where: { id: courseId } });
+    if (!course) {
+      return res.status(404).json({ success: false, error: 'Course not found' });
+    }
+
+    const activities = await prisma.courseActivity.findMany({
+      where: { courseId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.status(200).json({ success: true, data: activities });
   } catch (error) {
     next(error);
   }
