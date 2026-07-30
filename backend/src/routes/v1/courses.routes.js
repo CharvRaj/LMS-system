@@ -10,7 +10,7 @@ const {
   getInstructorStats,
   getLearningPaths,
   generateLessonsAI,
-  getCourseTimeline
+  getCourseTimeline,
 } = require('../../controllers/courses.controller');
 
 const { protect, authorize } = require('../../middlewares/auth.middleware');
@@ -28,7 +28,7 @@ router.route('/learning-paths')
   .get(getLearningPaths);
 
 router.route('/instructor/stats')
-  .get(protect, authorize('instructor', 'admin'), getInstructorStats);
+  .get(protect, authorize('admin'), getInstructorStats);
 
 router.route('/:id')
   .get(getCourse)

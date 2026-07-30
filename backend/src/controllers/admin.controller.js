@@ -256,7 +256,7 @@ exports.getDashboardStats = async (req, res, next) => {
     const teachersTrend = getTrend(teachersCount, prevTeachersCount);
     const coursesTrend = getTrend(coursesCount, prevCoursesCount);
     const revenueTrendSummary = getTrend(periodRevenue, prevRevenue);
-    const studentGrowth = await getStudentGrowthSnapshot(6);
+    const studentGrowth = await getStudentGrowthSnapshot(12);
 
     res.status(200).json({
       success: true,
@@ -598,7 +598,7 @@ exports.getRecentActivity = async (req, res, next) => {
 // @access  Private/Admin
 exports.getStudentGrowth = async (req, res, next) => {
   try {
-    const growthSnapshot = await getStudentGrowthSnapshot(6);
+    const growthSnapshot = await getStudentGrowthSnapshot(12);
 
     res.status(200).json({
       success: true,
@@ -1197,10 +1197,10 @@ exports.getAdminCourses = async (req, res, next) => {
     ]);
 
     // Compute revenue per course
-    const enriched = await Promise.all(courses.map(async (c) => {
+    const enriched = courses.map((c) => {
       const revenue = (c._count.enrollments || 0) * (c.price || 0);
       return { ...c, revenue, students: c._count.enrollments, lessons: c._count.lessons };
-    }));
+    });
 
     res.status(200).json({
       success: true,
