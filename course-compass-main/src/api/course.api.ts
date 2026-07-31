@@ -41,8 +41,9 @@ export const courseApi = {
   addLesson: (courseId: string, data: { title: string; content: string; videoUrl?: string; order: number }) => API.post(`/courses/${courseId}/lessons`, data),
   deleteLesson: (courseId: string, lessonId: string) => API.delete(`/courses/${courseId}/lessons/${lessonId}`),
 
-  // Stats
-  getInstructorStats: () => API.get("/courses/instructor/stats"),
+// Stats
+   getInstructorStats: () => API.get("/courses/instructor/stats"),
+  getInstructorCourseAnalytics: () => API.get("/courses/instructor/course-analytics"),
 
   // Timeline
   getCourseTimeline: (id: string) => API.get(`/courses/${id}/timeline`),
