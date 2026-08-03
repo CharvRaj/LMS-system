@@ -45,6 +45,7 @@ model User {
 
   courses     Course[]     @relation("InstructorCourses")
   enrollments Enrollment[]
+  wishlistedCourses Course[] @relation("UserWishlist")
 }
 
 model Course {
@@ -73,6 +74,7 @@ model Course {
   lessons          Lesson[]
   enrollments      Enrollment[]
   learningPaths    LearningPath[]  @relation("LearningPathCourses")
+  wishlistedBy     User[]          @relation("UserWishlist")
   activities       CourseActivity[]
 }
 

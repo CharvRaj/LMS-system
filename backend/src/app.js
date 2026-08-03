@@ -79,6 +79,7 @@ const userRoutesV1 = require('./routes/v1/users.routes');
 const adminRoutesV1 = require('./routes/v1/admin.routes');
 const profileRoutesV1 = require('./routes/v1/profile.routes');
 const uploadRoutesV1 = require('./routes/v1/upload.routes');
+const wishlistRoutesV1 = require('./routes/v1/wishlist.routes');
 const categoryRoutesV1 = require('./routes/v1/categories.routes');
 const analyticsRoutes = require('./analytics/analytics.routes');
 
@@ -90,6 +91,7 @@ app.use('/api/v1/users', userRoutesV1);
 app.use('/api/v1/admin', adminRoutesV1);
 app.use('/api/v1/profile', profileRoutesV1);
 app.use('/api/v1/upload', uploadRoutesV1);
+app.use('/api/v1/wishlist', wishlistRoutesV1);
 app.use('/api/v1/categories', categoryRoutesV1);
 app.use('/api/v1/analytics', analyticsRoutes);
 
@@ -101,6 +103,7 @@ app.use('/api/users', userRoutesV1);
 app.use('/api/admin', adminRoutesV1);
 app.use('/api/profile', profileRoutesV1);
 app.use('/api/upload', uploadRoutesV1);
+app.use('/api/wishlist', wishlistRoutesV1);
 app.use('/api/categories', categoryRoutesV1);
 app.use('/api/analytics', analyticsRoutes);
 
