@@ -458,6 +458,66 @@ exports.getInstructorStats = async (req, res, next) => {
   }
 };
 
+// @desc    Get per-course analytics for the logged-in instructor
+//          (enrollments, completion rate, average rating, revenue)
+// @route   GET /api/courses/instructor/course-analytics
+// @access  Private (Admin/Instructor — course owner only)
+exports.getInstructorCourseAnalytics = async (req, res, next) => {
+  try {
+    const instructorId = req.user.id;
+
+    // Single query, no N+1: fetch each owned course with just the
+    // enrollment status field needed to compute completion rate.
+    const courses = await prisma.course.findMany({
+      where: { instructorId },
+      select: {
+        id: true,
+        title: true,
+        price: true,
+        rating: true,
+        enrollments: {
+          select: { status: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const analytics = courses.map((course) => {
+      const totalEnrollments = course.enrollments.length;
+      const completedEnrollments = course.enrollments.filter(
+        (e) => e.status === "completed"
+      ).length;
+
+      // completionRate = (completed / enrolled) * 100, 0 when no enrollments
+      const completionRate =
+        totalEnrollments > 0
+          ? Number(((completedEnrollments / totalEnrollments) * 100).toFixed(1))
+          : 0;
+
+      // averageRating: Course has a single stored rating field (no per-user
+      // reviews table in this schema) — return 0 if never set.
+      const averageRating = course.rating ? Number(course.rating.toFixed(1)) : 0;
+
+      // revenue: this repo has no Payment/Order model, so — consistent with
+      // admin.controller.js's existing revenue math — revenue = price * enrollments.
+      const revenue = Number(((course.price || 0) * totalEnrollments).toFixed(2));
+
+      return {
+        courseId: course.id,
+        courseTitle: course.title,
+        enrollments: totalEnrollments,
+        completionRate,
+        averageRating,
+        revenue,
+      };
+    });
+
+    res.status(200).json({ success: true, data: analytics });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get all learning paths
 // @route   GET /api/courses/learning-paths
 // @access  Public
