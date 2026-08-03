@@ -13,6 +13,19 @@ const {
    generateLessonsAI,
    getCourseTimeline,
  } = require('../../controllers/courses.controller');
+  getCourses,
+  getTrendingCourses,
+  getCourse,
+  createCourse,
+  updateCourse,
+  deleteCourse,
+  addLesson,
+  deleteLesson,
+  getInstructorStats,
+  getLearningPaths,
+  generateLessonsAI,
+  getCourseTimeline,
+} = require('../../controllers/courses.controller');
 
 const { protect, authorize } = require('../../middlewares/auth.middleware');
 const { validate } = require('../../middlewares/validate.middleware');
@@ -24,6 +37,10 @@ const router = express.Router();
 router.route('/')
   .get(cacheMiddleware(300), getCourses)
   .post(protect, authorize('admin'), validate(courseSchema), createCourse);
+
+  //route trending courses
+router.route('/trending')
+  .get(getTrendingCourses);
 
 router.route('/learning-paths')
   .get(getLearningPaths);
