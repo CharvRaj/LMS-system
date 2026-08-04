@@ -1,5 +1,6 @@
 const { prisma } = require("../config/db");
 const { clearCache } = require("../middlewares/cache.middleware");
+const { logAdminAction } = require("../utils/auditLogger");
 
 // @desc    Get all courses
 // @route   GET /api/courses
@@ -186,7 +187,8 @@ exports.createCourse = async (req, res, next) => {
     if (status && !allowedStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        error: "Invalid status. Allowed values are: pending, approved, rejected.",
+        error:
+          "Invalid status. Allowed values are: pending, approved, rejected.",
       });
     }
 
@@ -220,10 +222,21 @@ exports.createCourse = async (req, res, next) => {
         userName: req.user.name,
       },
     });
+    await logAdminAction({
+      adminId: req.user.id,
+      action: "created",
+      resource: "course",
+      resourceId: course.id,
+      details: `Created course: ${course.title}`,
+    });
 
     if (generateAI) {
       const { generateLessonsForCourse } = require("../utils/aiGenerator");
-      const lessonsData = await generateLessonsForCourse(title, category, level);
+      const lessonsData = await generateLessonsForCourse(
+        title,
+        category,
+        level,
+      );
       for (const l of lessonsData) {
         await prisma.lesson.create({
           data: {
@@ -255,9 +268,13 @@ exports.createCourse = async (req, res, next) => {
 // @access  Private (Admin/Instructor)
 exports.updateCourse = async (req, res, next) => {
   try {
-    const course = await prisma.course.findUnique({ where: { id: req.params.id } });
+    const course = await prisma.course.findUnique({
+      where: { id: req.params.id },
+    });
     if (!course) {
-      return res.status(404).json({ success: false, error: "Course not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Course not found" });
     }
 
     if (req.user.role !== "admin") {
@@ -269,9 +286,13 @@ exports.updateCourse = async (req, res, next) => {
 
     const dataToUpdate = { ...req.body };
     if (dataToUpdate.category !== undefined) {
-      const categoryRecord = await prisma.category.findUnique({ where: { name: dataToUpdate.category } });
+      const categoryRecord = await prisma.category.findUnique({
+        where: { name: dataToUpdate.category },
+      });
       if (!categoryRecord) {
-        return res.status(400).json({ success: false, error: "Selected category was not found." });
+        return res
+          .status(400)
+          .json({ success: false, error: "Selected category was not found." });
       }
       dataToUpdate.categoryId = categoryRecord.id;
     }
@@ -288,14 +309,37 @@ exports.updateCourse = async (req, res, next) => {
     });
 
     const changedFields = [];
-    if (dataToUpdate.title !== undefined && dataToUpdate.title !== course.title) changedFields.push("title");
-    if (dataToUpdate.description !== undefined && dataToUpdate.description !== course.description) changedFields.push("description");
-    if (dataToUpdate.category !== undefined && dataToUpdate.category !== course.category) changedFields.push("category");
-    if (dataToUpdate.level !== undefined && dataToUpdate.level !== course.level) changedFields.push("level");
-    if (dataToUpdate.price !== undefined && dataToUpdate.price !== course.price) changedFields.push("price");
-    if (dataToUpdate.celebrityTeacher !== undefined && dataToUpdate.celebrityTeacher !== course.celebrityTeacher) changedFields.push("instructor");
-    if (dataToUpdate.instructorId !== undefined && dataToUpdate.instructorId !== course.instructorId) changedFields.push("instructorId");
-    if (dataToUpdate.status !== undefined && dataToUpdate.status !== course.status) changedFields.push("status");
+    if (dataToUpdate.title !== undefined && dataToUpdate.title !== course.title)
+      changedFields.push("title");
+    if (
+      dataToUpdate.description !== undefined &&
+      dataToUpdate.description !== course.description
+    )
+      changedFields.push("description");
+    if (
+      dataToUpdate.category !== undefined &&
+      dataToUpdate.category !== course.category
+    )
+      changedFields.push("category");
+    if (dataToUpdate.level !== undefined && dataToUpdate.level !== course.level)
+      changedFields.push("level");
+    if (dataToUpdate.price !== undefined && dataToUpdate.price !== course.price)
+      changedFields.push("price");
+    if (
+      dataToUpdate.celebrityTeacher !== undefined &&
+      dataToUpdate.celebrityTeacher !== course.celebrityTeacher
+    )
+      changedFields.push("instructor");
+    if (
+      dataToUpdate.instructorId !== undefined &&
+      dataToUpdate.instructorId !== course.instructorId
+    )
+      changedFields.push("instructorId");
+    if (
+      dataToUpdate.status !== undefined &&
+      dataToUpdate.status !== course.status
+    )
+      changedFields.push("status");
 
     if (changedFields.length > 0) {
       let action = "edited";
@@ -304,7 +348,10 @@ exports.updateCourse = async (req, res, next) => {
       if (changedFields.includes("status") && updated.status === "approved") {
         action = "published";
         details = "Course approved and published.";
-      } else if (changedFields.includes("instructor") || changedFields.includes("instructorId")) {
+      } else if (
+        changedFields.includes("instructor") ||
+        changedFields.includes("instructorId")
+      ) {
         action = "instructor_changed";
         details = `Lead instructor changed to ${updated.celebrityTeacher || "none"}.`;
       }
@@ -317,6 +364,14 @@ exports.updateCourse = async (req, res, next) => {
           userId: req.user.id,
           userName: req.user.name,
         },
+      });
+
+      await logAdminAction({
+        adminId: req.user.id,
+        action,
+        resource: "course",
+        resourceId: course.id,
+        details,
       });
     }
 
@@ -333,9 +388,13 @@ exports.updateCourse = async (req, res, next) => {
 // @access  Private (Admin/Instructor)
 exports.deleteCourse = async (req, res, next) => {
   try {
-    const course = await prisma.course.findUnique({ where: { id: req.params.id } });
+    const course = await prisma.course.findUnique({
+      where: { id: req.params.id },
+    });
     if (!course) {
-      return res.status(404).json({ success: false, error: "Course not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Course not found" });
     }
 
     if (req.user.role !== "admin") {
@@ -345,7 +404,18 @@ exports.deleteCourse = async (req, res, next) => {
       });
     }
 
-    await prisma.course.delete({ where: { id: req.params.id } });
+    await prisma.course.delete({
+      where: { id: req.params.id },
+    });
+
+    await logAdminAction({
+      adminId: req.user.id,
+      action: "deleted",
+      resource: "course",
+      resourceId: course.id,
+      details: `Deleted course: ${course.title}`,
+    });
+    
     await clearCache("cache:/api/courses");
     await clearCache(`cache:/api/courses/${req.params.id}`);
     res.status(200).json({ success: true, data: {} });
@@ -359,9 +429,13 @@ exports.deleteCourse = async (req, res, next) => {
 // @access  Private (Admin/Instructor)
 exports.addLesson = async (req, res, next) => {
   try {
-    const course = await prisma.course.findUnique({ where: { id: req.params.courseId } });
+    const course = await prisma.course.findUnique({
+      where: { id: req.params.courseId },
+    });
     if (!course) {
-      return res.status(404).json({ success: false, error: "Course not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Course not found" });
     }
 
     if (req.user.role !== "admin") {
@@ -394,9 +468,13 @@ exports.addLesson = async (req, res, next) => {
 // @access  Private (Admin/Instructor)
 exports.deleteLesson = async (req, res, next) => {
   try {
-    const course = await prisma.course.findUnique({ where: { id: req.params.courseId } });
+    const course = await prisma.course.findUnique({
+      where: { id: req.params.courseId },
+    });
     if (!course) {
-      return res.status(404).json({ success: false, error: "Course not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Course not found" });
     }
 
     if (req.user.role !== "admin") {
@@ -406,9 +484,13 @@ exports.deleteLesson = async (req, res, next) => {
       });
     }
 
-    const lesson = await prisma.lesson.findUnique({ where: { id: req.params.lessonId } });
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: req.params.lessonId },
+    });
     if (!lesson || lesson.courseId !== req.params.courseId) {
-      return res.status(404).json({ success: false, error: "Lesson not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Lesson not found" });
     }
 
     await prisma.lesson.delete({ where: { id: req.params.lessonId } });
@@ -548,7 +630,9 @@ exports.generateLessonsAI = async (req, res, next) => {
     });
 
     if (!course) {
-      return res.status(404).json({ success: false, error: "Course not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Course not found" });
     }
 
     if (req.user.role !== "admin") {
@@ -607,7 +691,9 @@ exports.getCourseTimeline = async (req, res, next) => {
 
     const course = await prisma.course.findUnique({ where: { id: courseId } });
     if (!course) {
-      return res.status(404).json({ success: false, error: "Course not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Course not found" });
     }
 
     const activities = await prisma.courseActivity.findMany({
