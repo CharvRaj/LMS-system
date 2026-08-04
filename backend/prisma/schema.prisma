@@ -74,6 +74,10 @@ model Course {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
+  // Soft Delete Fields
+  isDeleted        Boolean         @default(false)
+  deletedAt        DateTime?
+
   lessons          Lesson[]
   enrollments      Enrollment[]
   learningPaths    LearningPath[]  @relation("LearningPathCourses")
