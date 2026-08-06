@@ -41,7 +41,7 @@ const Courses = () => {
             shortDesc: course.description?.substring(0, 100) || course.description,
             fullDesc: course.description,
             level: course.level,
-            category: course.category,
+            category: course.category?.name || course.category || '',
             lessons: course.lessons?.length || 0,
             projects: 2,
             certificate: true,

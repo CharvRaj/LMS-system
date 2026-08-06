@@ -342,7 +342,20 @@ async function main() {
     }
   }
 
-  // 2. Create Courses
+  // 2. Create Categories (single source of truth for course category)
+  const categoriesByName = {};
+  for (const c of seedCourses) {
+    const name = c.category.trim();
+    if (!categoriesByName[name]) {
+      categoriesByName[name] = await prisma.category.upsert({
+        where: { name },
+        update: {},
+        create: { name }
+      });
+    }
+  }
+
+  // 3. Create Courses
   const dbCourses = {};
   for (const c of seedCourses) {
     let course = await prisma.course.findFirst({ where: { title: c.title } });
@@ -351,7 +364,7 @@ async function main() {
         data: {
           title: c.title,
           description: c.description,
-          category: c.category,
+          categoryId: categoriesByName[c.category.trim()].id,
           level: c.level,
           price: c.price,
           thumbnail: c.thumbnail,
@@ -370,7 +383,7 @@ async function main() {
     dbCourses[c.slug] = course;
   }
 
-  // 3. Create Learning Paths
+  // 4. Create Learning Paths
   for (const lp of seedLearningPaths) {
     let path = await prisma.learningPath.findUnique({ where: { slug: lp.slug } });
     if (!path) {

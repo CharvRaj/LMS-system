@@ -1,4 +1,5 @@
 const { prisma } = require('../config/db');
+const { resolveCategoryId } = require('../utils/categoryResolver');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const getTrend = (curr, prev) => {
@@ -517,11 +518,11 @@ exports.getAnalytics = async (req, res, next) => {
     // Course distribution by category
     const allCourses = await prisma.course.findMany({
       where: { status: 'approved' },
-      select: { category: true }
+      select: { category: { select: { name: true } } }
     });
     const catMap = {};
     for (const c of allCourses) {
-      const cat = c.category || 'Other';
+      const cat = c.category?.name || 'Other';
       catMap[cat] = (catMap[cat] || 0) + 1;
     }
     const PALETTE = ['#8B5CF6', '#06B6D4', '#EC4899', '#F59E0B', '#10B981', '#3B82F6'];
@@ -681,7 +682,7 @@ exports.getAdminUser = async (req, res, next) => {
         bio: true, avatar: true, createdAt: true,
         enrollments: {
           include: {
-            course: { select: { id: true, title: true, price: true, category: true } },
+            course: { select: { id: true, title: true, price: true, category: { select: { name: true } } } },
             completedLessons: { select: { id: true } }
           }
         }
@@ -817,7 +818,7 @@ exports.getAdminCourses = async (req, res, next) => {
 
     const where = {};
     if (status) where.status = status;
-    if (category) where.category = category;
+    if (category) where.category = { name: category };
     if (level) where.level = level;
     if (search) {
       where.OR = [
@@ -863,12 +864,20 @@ exports.getAdminCourses = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateCourseStatus = async (req, res, next) => {
   try {
-    const allowed = ['status', 'title', 'description', 'category', 'level', 'price', 'thumbnail', 'celebrityTeacher', 'gradient', 'icon', 'xp'];
+    const allowed = ['status', 'title', 'description', 'level', 'price', 'thumbnail', 'celebrityTeacher', 'gradient', 'icon', 'xp'];
     const updateData = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updateData[key] = req.body[key];
     }
     if (updateData.price !== undefined) updateData.price = parseFloat(updateData.price) || 0;
+
+    if (req.body.category !== undefined || req.body.categoryId !== undefined) {
+      const resolved = await resolveCategoryId({ categoryId: req.body.categoryId, category: req.body.category });
+      if (!resolved.ok) {
+        return res.status(400).json({ success: false, error: resolved.error });
+      }
+      updateData.categoryId = resolved.categoryId;
+    }
 
     const allowedStatuses = ['pending', 'approved', 'rejected'];
     if (updateData.status && !allowedStatuses.includes(updateData.status)) {

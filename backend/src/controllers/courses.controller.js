@@ -1,5 +1,6 @@
 const { prisma } = require('../config/db');
 const { clearCache } = require('../middlewares/cache.middleware');
+const { resolveCategoryId } = require('../utils/categoryResolver');
 
 // @desc    Get all courses
 // @route   GET /api/courses
@@ -14,7 +15,7 @@ exports.getCourses = async (req, res, next) => {
 
     const where = { status: 'approved' };
 
-    if (category) where.category = category;
+    if (category) where.category = { name: category };
     if (level) where.level = level;
 
     if (search) {
@@ -35,6 +36,7 @@ exports.getCourses = async (req, res, next) => {
         where,
         include: {
           instructor: { select: { id: true, name: true, email: true } },
+          category: true,
           lessons: true,
           _count: { select: { enrollments: true } }
         },
@@ -70,6 +72,7 @@ exports.getCourse = async (req, res, next) => {
       where: { id: req.params.id },
       include: {
         instructor: { select: { id: true, name: true, email: true } },
+        category: true,
         lessons: { orderBy: { order: 'asc' } },
         _count: { select: { enrollments: true } }
       }
@@ -99,7 +102,7 @@ exports.createCourse = async (req, res, next) => {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ success: false, error: 'Only admins can create and generate courses' });
     }
-    const { title, description, category, level, thumbnail, celebrityTeacher, price, duration, rating, outcomes, xp, gradient, icon, status, generateAI } = req.body;
+    const { title, description, category, categoryId, level, thumbnail, celebrityTeacher, price, duration, rating, outcomes, xp, gradient, icon, status, generateAI } = req.body;
 
     const allowedStatuses = ['pending', 'approved', 'rejected'];
     if (status && !allowedStatuses.includes(status)) {
@@ -109,11 +112,16 @@ exports.createCourse = async (req, res, next) => {
       });
     }
 
+    const resolved = await resolveCategoryId({ categoryId, category });
+    if (!resolved.ok) {
+      return res.status(400).json({ success: false, error: resolved.error });
+    }
+
     const course = await prisma.course.create({
       data: {
         title,
         description,
-        category,
+        categoryId: resolved.categoryId,
         level,
         thumbnail,
         celebrityTeacher,
@@ -131,7 +139,7 @@ exports.createCourse = async (req, res, next) => {
 
     if (generateAI) {
       const { generateLessonsForCourse } = require('../utils/aiGenerator');
-      const lessonsData = await generateLessonsForCourse(title, category, level);
+      const lessonsData = await generateLessonsForCourse(title, resolved.categoryName, level);
       for (const l of lessonsData) {
         await prisma.lesson.create({
           data: {
@@ -181,10 +189,19 @@ exports.updateCourse = async (req, res, next) => {
     if (dataToUpdate.rating !== undefined) {
       dataToUpdate.rating = parseFloat(dataToUpdate.rating) || 4.5;
     }
+    if (dataToUpdate.category !== undefined || dataToUpdate.categoryId !== undefined) {
+      const resolved = await resolveCategoryId({ categoryId: dataToUpdate.categoryId, category: dataToUpdate.category });
+      if (!resolved.ok) {
+        return res.status(400).json({ success: false, error: resolved.error });
+      }
+      dataToUpdate.categoryId = resolved.categoryId;
+      delete dataToUpdate.category;
+    }
 
     const updated = await prisma.course.update({
       where: { id: req.params.id },
-      data: dataToUpdate
+      data: dataToUpdate,
+      include: { category: true }
     });
     // Invalidate course cache
     await clearCache('cache:/api/courses');
@@ -453,7 +470,7 @@ exports.generateLessonsAI = async (req, res, next) => {
     });
 
     const { generateLessonsForCourse } = require('../utils/aiGenerator');
-    const lessonsData = await generateLessonsForCourse(course.title, course.category, course.level);
+    const lessonsData = await generateLessonsForCourse(course.title, course.category?.name, course.level);
 
     // Create the lessons
     const createdLessons = [];

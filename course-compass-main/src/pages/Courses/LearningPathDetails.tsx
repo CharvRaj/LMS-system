@@ -22,7 +22,7 @@ const LearningPathDetails = () => {
           title: c.title,
           description: c.description,
           instructor: c.celebrityTeacher || c.instructor?.name || "Unknown",
-          category: c.category,
+          category: c.category?.name || '',
           level: c.level || "Beginner",
           thumbnail: c.thumbnail || COURSE_PLACEHOLDER,
           lessons: Array.isArray(c.lessons) ? c.lessons.length : (c.lessons || 0),
