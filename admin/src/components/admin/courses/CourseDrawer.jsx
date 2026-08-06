@@ -12,7 +12,11 @@ import { useFocusTrap } from '../../../hooks/useFocusTrap';
 // Level Options
 const LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
 
-const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit, teachers = [], categories = [] }) => {
+// Stable empty arrays so default props don't change identity on every render
+const EMPTY_TEACHERS = [];
+const EMPTY_CATEGORIES = [];
+
+const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit, teachers = EMPTY_TEACHERS, categories = EMPTY_CATEGORIES }) => {
   const panelRef = useFocusTrap(isOpen, onClose);
   const [form, setForm] = useState({
     title: '',
@@ -108,7 +112,7 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit, teachers = [], ca
       });
       setAvatarPreview(null);
     }
-  }, [courseToEdit, isOpen, teachers]);
+  }, [courseToEdit, isOpen]);
 
   // Handle ESC key close
   useEffect(() => {
