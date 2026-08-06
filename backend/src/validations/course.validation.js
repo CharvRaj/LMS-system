@@ -8,7 +8,7 @@ const courseSchema = z.object({
     categoryId: z.string().optional(),
     celebrityTeacher: z.string().optional()
   }).refine((data) => data.category || data.categoryId, {
-    message: 'Category is required',
+    message: 'Category (name or id) is required',
     path: ['category']
   })
 });

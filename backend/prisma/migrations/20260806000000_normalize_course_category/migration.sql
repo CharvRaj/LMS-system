@@ -1,15 +1,5 @@
--- CreateTable
-CREATE TABLE "Category" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "Category_pkey" PRIMARY KEY ("id")
-);
-
--- CreateIndex
-CREATE UNIQUE INDEX "Category_name_key" ON "Category"("name");
+-- Add description column if it does not yet exist (added by 20260726201500_add_categories)
+ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "description" TEXT;
 
 -- Backfill categories from existing course category strings (case-insensitive)
 INSERT INTO "Category" ("id", "name", "createdAt", "updatedAt")
@@ -20,10 +10,10 @@ SELECT DISTINCT ON (lower(btrim("category")))
        NOW()
 FROM "Course"
 WHERE btrim("category") <> ''
-ORDER BY lower(btrim("category")), btrim("category");
+ON CONFLICT ("name") DO NOTHING;
 
--- Add categoryId column (nullable so it can be backfilled)
-ALTER TABLE "Course" ADD COLUMN "categoryId" TEXT;
+-- Add categoryId column if it does not yet exist (nullable so it can be backfilled)
+ALTER TABLE "Course" ADD COLUMN IF NOT EXISTS "categoryId" TEXT;
 
 -- Link each course to its category by name (case-insensitive)
 UPDATE "Course" c
@@ -45,7 +35,10 @@ WHERE "categoryId" IS NULL;
 ALTER TABLE "Course" ALTER COLUMN "categoryId" SET NOT NULL;
 
 -- Drop the duplicated string-based category column
-ALTER TABLE "Course" DROP COLUMN "category";
+ALTER TABLE "Course" DROP COLUMN IF EXISTS "category";
+
+-- Re-point the FK to RESTRICT (single source of truth is categoryId)
+ALTER TABLE "Course" DROP CONSTRAINT IF EXISTS "Course_categoryId_fkey";
 
 -- AddForeignKey
 ALTER TABLE "Course" ADD CONSTRAINT "Course_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

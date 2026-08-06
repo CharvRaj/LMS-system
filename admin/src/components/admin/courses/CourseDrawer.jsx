@@ -4,33 +4,15 @@ import {
   MdClose, MdUploadFile, MdBook, MdTitle, MdDescription,
   MdLayers, MdCategory, MdTimer, MdLanguage, MdPerson,
   MdAttachMoney, MdLocalOffer, MdSchool, MdAssignment,
-  MdCheckCircle, MdOutlineFiberManualRecord, MdSearch
+  MdCheckCircle, MdOutlineFiberManualRecord, MdSearch,
+  MdRefresh, MdErrorOutline
 } from 'react-icons/md';
 import { useFocusTrap } from '../../../hooks/useFocusTrap';
-
-// Category Options
-const CATEGORIES = [
-  'DSA',
-  'Web Development',
-  'Mobile Development',
-  'AI/ML',
-  'DevOps',
-  'Programming Languages'
-];
 
 // Level Options
 const LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
 
-// Static fallback teachers in case local storage is not populated
-const DEFAULT_TEACHERS = [
-  { id: 1, name: 'Salman Khan' },
-  { id: 2, name: 'Virat Kohli' },
-  { id: 3, name: 'Sachin Tendulkar' },
-  { id: 4, name: 'Anushka Sharma' },
-  { id: 5, name: 'Katrina Kaif' }
-];
-
-const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
+const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit, teachers = [], categories = [] }) => {
   const panelRef = useFocusTrap(isOpen, onClose);
   const [form, setForm] = useState({
     title: '',
@@ -54,32 +36,16 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
   });
 
   const [avatarPreview, setAvatarPreview] = useState(null);
-  const [teachers, setTeachers] = useState(DEFAULT_TEACHERS);
   const [searchTeacherQuery, setSearchTeacherQuery] = useState('');
   const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false);
   const teacherDropdownRef = useRef(null);
 
-  // Load actual teachers from local storage if available
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('lms_teachers_data');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setTeachers(parsed);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to load teachers for course dropdown:", e);
-    }
-  }, [isOpen]);
-
-  // Set default teacher if not editing
-  useEffect(() => {
-    if (teachers.length > 0 && !courseToEdit && !form.teacher) {
-      setForm(prev => ({ ...prev, teacher: teachers[0].name }));
-    }
-  }, [teachers, courseToEdit]);
+  // ── GitHub Issue #105: Upload Progress Indicator & Retry State ──
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [lastSelectedFile, setLastSelectedFile] = useState(null);
 
   // Handle outside click to close searchable teacher dropdown
   useEffect(() => {
@@ -98,17 +64,18 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
       setForm({
         title: courseToEdit.title || '',
         slug: courseToEdit.slug || (courseToEdit.title ? courseToEdit.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') : ''),
-        shortDesc: courseToEdit.shortDesc || 'Learn advanced concepts and real-world techniques.',
-        fullDesc: courseToEdit.fullDesc || 'Detailed curriculum covering all fundamentals and best practices.',
+        shortDesc: courseToEdit.shortDesc || courseToEdit.description || '',
+        fullDesc: courseToEdit.fullDesc || courseToEdit.description || '',
         level: courseToEdit.level || 'Beginner',
-        category: courseToEdit.category || 'Web Development',
-        duration: courseToEdit.hours || courseToEdit.duration || '30',
+        category: courseToEdit.category || '',
+        duration: courseToEdit.hours || courseToEdit.duration || '',
         language: courseToEdit.language || 'English',
-        status: courseToEdit.status || (courseToEdit.active ? 'Published' : 'Draft'),
-        teacher: courseToEdit.teacher || (courseToEdit.mentorName || 'Salman Khan'),
-        price: courseToEdit.price || '499',
-        discountPrice: courseToEdit.discountPrice || '299',
-        lessons: courseToEdit.lessons || '15',
+        status: courseToEdit.status === 'approved' || courseToEdit.active ? 'Published' : 'Draft',
+        teacher: courseToEdit.teacher || courseToEdit.instructor?.name || '',
+        instructorId: courseToEdit.instructorId || courseToEdit.instructor?.id || '',
+        price: courseToEdit.price || '',
+        discountPrice: courseToEdit.discountPrice || '',
+        lessons: courseToEdit.lessons || '',
         projects: courseToEdit.projects || '3',
         certificate: courseToEdit.certificate !== undefined ? courseToEdit.certificate : true,
         visibility: courseToEdit.visibility || 'Public',
@@ -124,11 +91,12 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
         shortDesc: '',
         fullDesc: '',
         level: 'Beginner',
-        category: 'Web Development',
+        category: '',
         duration: '',
         language: 'English',
         status: 'Published',
-        teacher: teachers[0]?.name || '',
+        teacher: '',
+        instructorId: '',
         price: '',
         discountPrice: '',
         lessons: '',
@@ -169,15 +137,53 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
     }));
   };
 
-  const handleImageUpload = (e) => {
+  // ── Simulated File Upload with Progress Bar & Retry logic (Issue #105) ──
+  const processFileUpload = (file) => {
+    if (!file) return;
+
+    setLastSelectedFile(file);
+    setUploadedFileName(file.name);
+    setUploadError(null);
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    let currentProgress = 0;
+    const interval = setInterval(() => {
+      currentProgress += Math.floor(Math.random() * 20) + 10;
+      if (currentProgress >= 100) {
+        currentProgress = 100;
+        clearInterval(interval);
+        setIsUploading(false);
+
+        // Read file if image
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setAvatarPreview(reader.result);
+            setForm((prev) => ({ ...prev, avatar: reader.result }));
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+      setUploadProgress(currentProgress);
+    }, 200);
+  };
+
+  const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setAvatarPreview(reader.result);
-      setForm(prev => ({ ...prev, avatar: reader.result }));
-    };
-    reader.readAsDataURL(file);
+    if (file.size > 15 * 1024 * 1024) {
+      setUploadError('File size exceeds 15MB limit.');
+      return;
+    }
+    processFileUpload(file);
+  };
+
+  // Retry function for issue #105 requirement
+  const handleRetryUpload = () => {
+    if (lastSelectedFile) {
+      processFileUpload(lastSelectedFile);
+    }
   };
 
   const handleSave = (statusOverride) => {
@@ -188,18 +194,6 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
 
     const submissionStatus = statusOverride || form.status;
 
-    // Create random or custom gradient if adding new
-    const gradients = [
-      'from-blue-600 via-blue-500 to-cyan-400',
-      'from-amber-500 via-orange-500 to-red-500',
-      'from-emerald-500 via-teal-500 to-green-400',
-      'from-purple-600 via-violet-500 to-pink-500',
-      'from-rose-500 via-pink-500 to-fuchsia-500',
-      'from-slate-600 via-slate-500 to-gray-400',
-      'from-cyan-500 via-sky-500 to-blue-500',
-      'from-indigo-600 via-purple-600 to-blue-500'
-    ];
-
     const categoryIcons = {
       'DSA': '🔢',
       'Web Development': '⚛️',
@@ -209,8 +203,8 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
       'Programming Languages': '💻'
     };
 
-    const gradient = courseToEdit?.gradient || gradients[Math.floor(Math.random() * gradients.length)];
-    const icon = courseToEdit?.icon || categoryIcons[form.category] || '📚';
+    const gradient = courseToEdit?.gradient || null;
+    const icon = courseToEdit?.icon || null;
 
     const savedCourse = {
       ...courseToEdit,
@@ -221,23 +215,23 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
       fullDesc: form.fullDesc,
       level: form.level,
       category: form.category,
-      lessons: parseInt(form.lessons) || 12,
-      projects: parseInt(form.projects) || 2,
+      lessons: parseInt(form.lessons, 10) || 0,
+      projects: parseInt(form.projects, 10) || 0,
       certificate: form.certificate,
       visibility: form.visibility,
       featured: form.featured,
-      duration: form.duration || '30',
-      hours: parseInt(form.duration) || 30,
+      duration: form.duration || null,
+      hours: parseInt(form.duration, 10) || 0,
       language: form.language,
       status: submissionStatus,
       active: submissionStatus === 'Published',
       teacher: form.teacher,
-      price: form.price || '499',
-      discountPrice: form.discountPrice || '299',
+      price: form.price || 0,
+      discountPrice: form.discountPrice || 0,
       gradient,
       icon,
       avatar: form.avatar,
-      rating: courseToEdit?.rating || 4.8,
+      rating: courseToEdit?.rating || 0,
       students: courseToEdit?.students || 0,
       completion: courseToEdit?.completion || 0
     };
@@ -333,7 +327,32 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
                 <motion.div variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } }}>
                   <label className={labelCls}>Course Thumbnail</label>
                   <label className="relative w-full h-44 rounded-2xl border-2 border-dashed border-purple-500/30 hover:border-purple-500/60 bg-purple-500/5 flex flex-col items-center justify-center text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 transition-all duration-300 cursor-pointer group overflow-hidden shadow-lg shadow-purple-500/5 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[#FF6B35] has-[:focus-visible]:outline-offset-2">
-                    {avatarPreview ? (
+                    {isUploading ? (
+                      <div className="w-full py-4 px-4 flex flex-col items-center">
+                        <div className="flex items-center justify-between w-full text-xs text-purple-300 font-semibold mb-2">
+                          <span className="truncate max-w-[200px]">{uploadedFileName}</span>
+                          <span>{uploadProgress}%</span>
+                        </div>
+                        <div className="w-full bg-white/10 rounded-full h-2.5 overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-purple-500 to-blue-500 h-2.5 rounded-full transition-all duration-200"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    ) : uploadError ? (
+                      <div className="flex flex-col items-center py-2 text-center px-4">
+                        <MdErrorOutline size={32} className="text-red-400 mb-1" />
+                        <span className="text-xs text-red-400 font-bold">{uploadError}</span>
+                        <button
+                          type="button"
+                          onClick={handleRetryUpload}
+                          className="mt-3 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+                        >
+                          <MdRefresh size={16} /> Retry Upload
+                        </button>
+                      </div>
+                    ) : avatarPreview ? (
                       <div className="w-full h-full relative">
                         <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -345,10 +364,10 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
                       <div className="flex flex-col items-center justify-center p-6 text-center">
                         <MdUploadFile size={36} className="text-purple-400/80 mb-2 group-hover:-translate-y-1.5 transition-transform duration-300" />
                         <span className="text-sm font-bold text-white">Drag & drop or browse</span>
-                        <span className="text-[11px] text-gray-500 mt-1">Supports PNG, JPG (Max 2MB)</span>
+                        <span className="text-[11px] text-gray-500 mt-1">Supports PNG, JPG (Max 15MB)</span>
                       </div>
                     )}
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                    <input type="file" accept="image/*" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
                   </label>
                 </motion.div>
 
@@ -456,7 +475,8 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
                           onChange={set('category')}
                           className="w-full bg-[#111827] border border-white/10 rounded-xl py-3 pl-11 pr-10 text-sm text-white focus:outline-none focus:border-purple-500 focus-visible:ring-2 focus-visible:ring-[#FF6B35] focus-visible:ring-offset-2 focus-visible:ring-offset-[#070b16] transition-all cursor-pointer appearance-none"
                         >
-                          {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          <option value="">Select a category</option>
+                          {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                         </select>
                         <MdOutlineFiberManualRecord className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" size={10} />
                       </div>
@@ -522,7 +542,7 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
                             setSearchTeacherQuery(e.target.value);
                             setIsTeacherDropdownOpen(true);
                           }}
-                          placeholder="Search celebrity mentors..."
+                          placeholder="Search instructors..."
                           className={`${inputCls} pl-11 pr-10`}
                         />
                         <button
@@ -549,7 +569,7 @@ const CourseDrawer = ({ isOpen, onClose, onSave, courseToEdit }) => {
                                   key={t.id}
                                   type="button"
                                   onClick={() => {
-                                    setForm(prev => ({ ...prev, teacher: t.name }));
+                                    setForm(prev => ({ ...prev, teacher: t.name, instructorId: t.id }));
                                     setIsTeacherDropdownOpen(false);
                                   }}
                                   className="w-full text-left px-4 py-3 text-xs text-white hover:bg-purple-600/20 hover:text-purple-300 transition-all border-b border-white/5 flex items-center justify-between"

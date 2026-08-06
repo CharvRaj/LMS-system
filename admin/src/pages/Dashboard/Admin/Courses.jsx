@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MdClose } from 'react-icons/md';
 import CourseDrawer from '../../../components/admin/courses/CourseDrawer';
@@ -7,82 +7,39 @@ import CourseKpiRow from '../../../components/admin/courses/CourseKpiRow';
 import TopPerformingCourses from '../../../components/admin/courses/TopPerformingCourses';
 import CoursesFilters from '../../../components/admin/courses/CoursesFilters';
 import CourseGrid from '../../../components/admin/courses/CourseGrid';
+import { apiFetch } from '../../../api/config';
 import {
-  loadCourses,
   normalizeCourse,
   getCategories,
   computeRevenue,
 } from '../../../utils/courseUtils';
 import { exportToCSV } from '../../../utils/export';
-import { courseApi } from '../../../api/courses.api';
+import { notifyCourseSync } from '../../../utils/courseSyncEvents';
 
 const Courses = () => {
-  const [courses, setCourses] = useState(loadCourses);
+  const [courses, setCourses] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [levelFilter, setLevelFilter] = useState('');
   const [notice, setNotice] = useState(null);
-  const [loading, setLoading] = useState(true);
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
 
-  // Fetch courses from backend on mount
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        const res = await courseApi.getAllCourses();
-        if (res.success && res.data) {
-          // Map backend courses to admin format
-          const mappedCourses = res.data.map(course => ({
-            id: course.id,
-            title: course.title,
-            slug: course.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-            shortDesc: course.description?.substring(0, 100) || course.description,
-            fullDesc: course.description,
-            level: course.level,
-            category: course.category?.name || course.category || '',
-            lessons: course.lessons?.length || 0,
-            projects: 2,
-            certificate: true,
-            visibility: 'Public',
-            featured: false,
-            duration: course.duration,
-            language: 'English',
-            status: course.status === 'approved' ? 'Published' : 'Draft',
-            active: course.status === 'approved',
-            teacher: course.instructor?.name || course.celebrityTeacher || 'Unknown',
-            price: course.price?.toString() || '0',
-            discountPrice: (course.price * 0.7)?.toString() || '0',
-            gradient: course.gradient || 'from-blue-600 via-blue-500 to-cyan-400',
-            icon: course.icon || '📚',
-            avatar: course.thumbnail,
-            rating: course.rating || 4.8,
-            students: course._count?.enrollments || 0,
-            completion: 0,
-            revenue: (course.price || 0) * (course._count?.enrollments || 0)
-          }));
-          setCourses(mappedCourses);
-          localStorage.setItem('lms_courses_data', JSON.stringify(mappedCourses));
-        }
-      } catch (error) {
-        console.error('Failed to fetch courses:', error);
-        // Fallback to localStorage
-        const stored = localStorage.getItem('lms_courses_data');
-        if (stored) setCourses(JSON.parse(stored));
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchCourses();
+  const fetchCourses = useCallback(async () => {
+    try {
+      const payload = await apiFetch('/admin/courses');
+      const list = Array.isArray(payload?.data) ? payload.data : [];
+      setCourses(list.map((course) => normalizeCourse(course)));
+    } catch (error) {
+      console.error('Failed to fetch courses:', error);
+      setCourses([]);
+    }
   }, []);
 
-  // Sync to localStorage when courses change (but not on initial load)
   useEffect(() => {
-    if (!loading) {
-      localStorage.setItem('lms_courses_data', JSON.stringify(courses));
-    }
-  }, [courses, loading]);
+    fetchCourses();
+  }, [fetchCourses]);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -113,16 +70,17 @@ const Courses = () => {
 
   const showNotice = (message) => setNotice(message);
 
-  const handleDelete = (id) => {
-    if (window.confirm('Are you sure you want to delete this course?')) {
-      // Delete from backend
-      courseApi.deleteCourse(id).catch(err => {
-        console.error('Failed to delete from backend:', err);
-        showNotice('Error deleting course from backend.');
-      });
-      // Delete from local state
-      setCourses((prev) => prev.filter((c) => c.id !== id));
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this course?')) return;
+
+    try {
+      await apiFetch(`/courses/${id}`, { method: 'DELETE' });
+      await fetchCourses();
+      notifyCourseSync();
       showNotice('Course deleted.');
+    } catch (error) {
+      console.error('Failed to delete course:', error);
+      showNotice('Unable to delete course.');
     }
   };
 
@@ -143,69 +101,79 @@ const Courses = () => {
 
   const handleSaveCourse = async (savedCourse) => {
     try {
-      // Map admin fields to backend fields
-      const backendCourse = {
+      const isEditing = Boolean(selectedCourse);
+      const payload = {
         title: savedCourse.title,
-        description: savedCourse.fullDesc || savedCourse.shortDesc,
+        description: savedCourse.shortDesc || savedCourse.fullDesc || savedCourse.description || '',
         category: savedCourse.category,
         level: savedCourse.level,
-        price: parseFloat(savedCourse.price) || 0,
-        thumbnail: savedCourse.avatar,
-        celebrityTeacher: savedCourse.teacher,
-        status: savedCourse.status === 'Published' ? 'approved' : 'pending',
-        duration: savedCourse.duration?.toString() || 'Self-paced',
-        rating: savedCourse.rating || 4.5,
-        outcomes: [],
-        xp: '1000 XP',
+        price: Number(savedCourse.price) || 0,
+        thumbnail: savedCourse.thumbnail || savedCourse.avatar || '',
+        celebrityTeacher: savedCourse.teacher || savedCourse.celebrityTeacher || '',
+        duration: savedCourse.duration || savedCourse.hours || 'Self-paced',
+        rating: Number(savedCourse.rating) || 4.5,
+        outcomes: savedCourse.outcomes || [],
+        xp: savedCourse.xp || '1000 XP',
         gradient: savedCourse.gradient || 'from-blue-600 via-blue-500 to-cyan-400',
-        icon: savedCourse.icon || '📚'
+        icon: savedCourse.icon || '📚',
+        status: savedCourse.status === 'Published' ? 'approved' : (savedCourse.status || 'approved'),
       };
 
-      // Create or update in backend
-      if (selectedCourse && selectedCourse.id) {
-        // Update existing
-        await courseApi.updateCourse(selectedCourse.id, backendCourse);
+      if (isEditing) {
+        await apiFetch(`/courses/${savedCourse.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       } else {
-        // Create new
-        await courseApi.createCourse(backendCourse);
+        await apiFetch('/courses', { method: 'POST', body: JSON.stringify(payload) });
       }
 
-      // Update local state
-      setCourses((prev) => {
-        const normalized = normalizeCourse(
-          savedCourse,
-          prev.findIndex((c) => c.id === savedCourse.id)
-        );
-        const exists = prev.some((c) => c.id === savedCourse.id);
-        if (exists) {
-          return prev.map((c) => (c.id === savedCourse.id ? normalized : c));
-        }
-        return [normalized, ...prev];
-      });
-      showNotice(selectedCourse ? 'Course updated.' : 'Course created.');
+      await fetchCourses();
+      notifyCourseSync();
+      showNotice(isEditing ? 'Course updated.' : 'Course created.');
     } catch (error) {
       console.error('Failed to save course:', error);
-      showNotice('Error saving course to backend.');
+      showNotice('Unable to save course.');
     }
   };
+const handleClone = async (course) => {
+  try {
+    const copyTitle = `${course.title} (Copy)`;
 
-  const handleClone = (course) => {
-    const clone = normalizeCourse(
-      {
-        ...course,
-        id: Date.now(),
-        title: `${course.title} (Copy)`,
-        students: 0,
-        completion: 0,
-        active: false,
-        revenue: 0,
-      },
-      courses.length
-    );
-    setCourses((prev) => [clone, ...prev]);
+    const generatedSlug = copyTitle
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-');
+
+    const clonePayload = {
+      title: copyTitle,
+      slug: generatedSlug,
+      description: course.description || course.shortDesc || 'Cloned course',
+      category: course.category,
+      level: course.level,
+      price: Number(course.price) || 0,
+      thumbnail: course.thumbnail || '',
+      celebrityTeacher: course.teacher || course.celebrityTeacher || '',
+      duration: course.duration || 'Self-paced',
+      rating: Number(course.rating) || 4.5,
+      outcomes: course.outcomes || [],
+      xp: course.xp || '1000 XP',
+      gradient: course.gradient || 'from-blue-600 via-blue-500 to-cyan-400',
+      icon: course.icon || '📚',
+      status: 'draft',
+    };
+
+    await apiFetch('/courses', {
+      method: 'POST',
+      body: JSON.stringify(clonePayload),
+    });
+
+    await fetchCourses();
+    notifyCourseSync();
     showNotice('Course cloned as draft.');
-  };
-
+  } catch (error) {
+    console.error('Failed to clone course:', error);
+    showNotice('Unable to clone course.');
+  }
+};
   const handleExport = () => {
     exportToCSV(
       filtered,

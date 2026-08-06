@@ -12,8 +12,13 @@ export interface CourseData {
   category?: string | CategoryRef | null;
   categoryId?: string;
   level: string;
+  duration?: string;
   price?: number;
   thumbnail?: string;
+  rating?: number;
+  progress?: number;
+  lessons?: Array<{ id?: string }> | number;
+  enrollments?: number;
   celebrityTeacher?: string;
   instructor?: {
     id: string;
@@ -25,11 +30,11 @@ export interface CourseData {
   generateAI?: boolean;
 }
 
-
 export const courseApi = {
-  getAllCourses: () => API.get("/courses"),
+  getAllCourses: (config?: object) => API.get("/courses", config),
   getTrendingCourses: (limit?: number) => API.get(`/courses/trending${limit ? `?limit=${limit}` : ""}`),
   getAdminCourses: (page?: number, limit?: number) => API.get(`/courses/admin/all${page || limit ? `?${page ? `page=${page}` : ''}${limit ? `&limit=${limit}` : ''}` : ""}`),
+  getCategories: () => API.get("/categories"),
   getLearningPaths: () => API.get("/courses/learning-paths"),
   getCourseById: (id: string) => API.get(`/courses/${id}`),
   createCourse: (data: CourseData) => API.post("/courses", data),
@@ -49,6 +54,10 @@ export const courseApi = {
   addLesson: (courseId: string, data: { title: string; content: string; videoUrl?: string; order: number }) => API.post(`/courses/${courseId}/lessons`, data),
   deleteLesson: (courseId: string, lessonId: string) => API.delete(`/courses/${courseId}/lessons/${lessonId}`),
 
-  // Stats
-  getInstructorStats: () => API.get("/courses/instructor/stats"),
+// Stats
+   getInstructorStats: () => API.get("/courses/instructor/stats"),
+  getInstructorCourseAnalytics: () => API.get("/courses/instructor/course-analytics"),
+
+  // Timeline
+  getCourseTimeline: (id: string) => API.get(`/courses/${id}/timeline`),
 };
