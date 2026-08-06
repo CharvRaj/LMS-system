@@ -1,10 +1,16 @@
 import API from "./client";
 
+export interface CategoryRef {
+  id: string;
+  name: string;
+}
+
 export interface CourseData {
   id?: string;
   title: string;
   description: string;
-  category: string;
+  category?: string | CategoryRef | null;
+  categoryId?: string;
   level: string;
   duration?: string;
   price?: number;

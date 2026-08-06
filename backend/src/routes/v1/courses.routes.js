@@ -1,19 +1,6 @@
 const express = require('express');
 
 const {
-   getCourses,
-   getCourse,
-   createCourse,
-   updateCourse,
-   deleteCourse,
-   addLesson,
-   deleteLesson,
-   getInstructorStats,
-  getInstructorCourseAnalytics,
-   getLearningPaths,
-   generateLessonsAI,
-   getCourseTimeline,
- } = require('../../controllers/courses.controller');
   getCourses,
   getTrendingCourses,
   getCourse,
@@ -24,11 +11,11 @@ const {
   addLesson,
   deleteLesson,
   getInstructorStats,
+  getInstructorCourseAnalytics,
   getLearningPaths,
   generateLessonsAI,
   getCourseTimeline,
 } = require('../../controllers/courses.controller');
-
 
 const { protect, authorize } = require('../../middlewares/auth.middleware');
 
@@ -38,9 +25,7 @@ const { courseSchema, lessonSchema } = require('../../validations/course.validat
 
 const { cacheMiddleware } = require('../../middlewares/cache.middleware');
 
-
 const router = express.Router();
-
 
 // ===============================
 // Courses
@@ -59,21 +44,15 @@ router.route('/')
     createCourse
   );
 
-
-
 // ===============================
-// Learning Paths
+// Trending / Learning Paths
 // ===============================
 
-  //route trending courses
 router.route('/trending')
   .get(getTrendingCourses);
 
 router.route('/learning-paths')
-
   .get(getLearningPaths);
-
-
 
 // ===============================
 // Instructor Statistics
@@ -83,21 +62,16 @@ router.route('/instructor/stats')
 
   .get(
     protect,
-    authorize('instructor','admin'),
+    authorize('instructor', 'admin'),
     getInstructorStats
   );
-
-
-
-// ===============================
-// Single Course
-// ===============================
-  router.route('/instructor/stats')
-   .get(protect, authorize('admin'), getInstructorStats);
 
 router.route('/instructor/course-analytics')
   .get(protect, authorize('admin'), getInstructorCourseAnalytics);
 
+// ===============================
+// Single Course
+// ===============================
 
 router.route('/:id')
 
@@ -116,8 +90,6 @@ router.route('/:id')
     deleteCourse
   );
 
-
-
 // ===============================
 // Restore Deleted Course
 // ===============================
@@ -129,8 +101,6 @@ router.route('/:id/restore')
     authorize('admin'),
     restoreCourse
   );
-
-
 
 // ===============================
 // Lessons
@@ -148,8 +118,6 @@ router.route('/:courseId/lessons')
     addLesson
   );
 
-
-
 // ===============================
 // Generate AI Lessons
 // ===============================
@@ -162,8 +130,6 @@ router.route('/:courseId/generate-lessons')
     generateLessonsAI
   );
 
-
-
 // ===============================
 // Delete Lesson
 // ===============================
@@ -175,7 +141,5 @@ router.route('/:courseId/lessons/:lessonId')
     authorize('admin'),
     deleteLesson
   );
-
-
 
 module.exports = router;
